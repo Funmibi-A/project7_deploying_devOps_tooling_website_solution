@@ -86,6 +86,8 @@
 
 
 # **LABs**
+
+![project diagram](./images/project_diagram.jpg)
 ## Implementing a DevOps Tooling Website Solution
 
 ## Step 1 - Prepare the NFS Server
@@ -94,17 +96,29 @@
 
 > Based on your LVM experience from Project 6, __Configure LVM on the Server.__
 
-__format disks using fdisk__
+__Use fdisk utility to create a single partition on each of the 3 disks__
+
+    sudo fdisk /dev/xvdf
+    sudo fdisk /dev/xvfg
+    sudo fdisk /dev/xvfh
 
 __Verify the attached disks were formated properly__
+
+    lsblk 
+
+![lsblk](./images/lsblk.jpg)
 
 __install lvm2__
 
     sudo yum install lvm2
 
+![install lvm](./images/lvm.jpg)
+
 __Check for available partitions__
 
     sudo lvmdiskscan
+
+![lvmdiskscan](./images/lvmdiskscan.jpg)
 
 __Use pvcreate utility to mark each of 3 disks as physical volumes (PVs) to be used by LVM__
 
@@ -118,6 +132,8 @@ __Verify the physical volumes__
 
     sudo pvs
     
+![sudo pvs](./images/sudo_pvs.jpg)
+
 __Use vgcreate utility to add all 3 PVs to a volume group (VG). Name the VG webdata-vg__
 
     sudo vgcreate nasdata-vg /dev/xvdh1 /dev/xvdg1 /dev/xvdf1
@@ -136,12 +152,13 @@ __Use lvcreate utility to create 2 logical volumes.__
     sudo lvcreate -n lv-apps -L 9.5G nasdata-vg
     sudo lvcreate -n lv-logs -L 9.5G nasdata-vg
 
+![lvcreate](./images/lvcreate.jpg)
 
 __Verify logical group__
 
     sudo lvs
 
-![lvcreate](./images/lvcreate.jpg)
+![lvs](./images/lvs.jpg)
 
 ![vgdisplay](./images/vgdisplay_1.jpg)
 ![vgdisplay](./images/vgdisplay_2.jpg)
@@ -153,7 +170,7 @@ __Verify logical group__
 
     sudo mkfs -t xfs /dev/nasdata-vg/lv-apps
 
-    sudo mkfs -t xfs /dev/nasdata-vg/lv-opt
+    sudo mkfs -t xfs /dev/nasdata-vg/lv-logs
 
 ![formatting with the xfs file system](./images/xfs.jpg)
 
@@ -165,7 +182,7 @@ __Verify logical group__
     Mount lv-logs on /mnt/logs – To be used by webserver logs
 
     Mount lv-opt on /mnt/opt – To be used by Jenkins server in Project 8   
-
+---
     sudo mkdir /mnt/apps
     sudo mkdir /mnt/opt
     sudo mkdir /mnt/logs
@@ -242,9 +259,9 @@ __Note:__ To check your 'subnet cidr' - open your EC2 details in AWS web console
 
 > Find the port being used by NFS and create new inbound rules in the security group to allow traffic on that port.
 
-![port](./images/ports.jpg)
-
     rpcinfo -p | grep nfs
+
+![port](./images/ports.jpg)
 
 Note: Open the following ports to allow the NFS server to be accessible from the clients
 TCP port 111, 
@@ -254,7 +271,7 @@ UDP port 2049
 ![nfs_ports](./images/nfs_ports.jpg)
 
 
-### Install and configure a MySQL DBMS to work with remote Web Server
+# Install and configure a MySQL DBMS to work with remote Web Server
 
 > Install mysql server
   
@@ -262,7 +279,7 @@ Update repository
 
   __update 
 
-    sudo dnf update
+    sudo yum update
 
   __install MySQL repository by downloading and installing the appropriate RPM package frm MySQL website__
 
@@ -313,13 +330,17 @@ Update repository
   __Create a database user and name it webaccess__
 
 ```SQL
-     CREATE USER 'webaccess'@'172.31.80.0/20' IDENTIFIED BY 'new_pass';
+    CREATE USER 'webaccess'@'172.31.51.216' IDENTIFIED BY 'mypass';
+
+    CREATE USER 'webaccess'@'172.31.59.169' IDENTIFIED BY 'mypass';
 ```
 
 ![db_user](./images/db_user.jpg)
 
 ```SQL
-    GRANT ALL PRIVILEGES ON tooling.* TO 'webaccess'@'172.31.80.0/20' WITH GRANT OPTION;
+    GRANT ALL PRIVILEGES ON tooling.* TO 'webaccess'@'172.31.51.216' WITH GRANT OPTION;
+
+     GRANT ALL PRIVILEGES ON tooling.* TO 'webaccess'@'172.31.59.169' WITH GRANT OPTION;
 ```
 
 ![db_priviledges](./images/db_priviledges.jpg)
@@ -354,14 +375,18 @@ __Make sure the changes persist on Web server after reboot__
 
 __add the following lines__
 
-    172.31.80.61:/mnt/apps /var/www nfs defaults 0 0
+    172.31.48.161:/mnt/apps /var/www nfs defaults 0 0
 
 __Install Remi's repository, Apache and PHP__
 
 
     sudo yum install httpd -y
+    
+    sudo systemctl start httpd
+    sudo systemctl status httpd
 
 ![install httpd](./images/install_httpd.jpg)
+
 
     sudo dnf install https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm
 
@@ -419,11 +444,10 @@ __Update the website configuration to connect to the dataase in the "/var/www/ht
 
     mysql -h <databse-private-ip> -u <db-username> -p <db-name> < tooling-db.sql
 
-
 __Create in mysql a new admin user with username: myuser and password: password:__
 
 ```SQL
-    INSERT INTO `users` (`id`, `username`, `password`, `email`, `user_type`, `status`) VALUES (1, 'myuser', 'password', 'user@mail.com', 'admin', '1');
+    INSERT INTO `users` (`id`, `username`, `password`, `email`, `user_type`, `status`) VALUES (1, 'myuser', 'mypass', 'user@mail.com', 'admin', '1');
 ```
 
 __Open the website in your web browser__
