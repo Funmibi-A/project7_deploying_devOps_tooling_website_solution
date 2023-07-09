@@ -96,11 +96,18 @@
 
 > Based on your LVM experience from Project 6, __Configure LVM on the Server.__
 
-__Use fdisk utility to create a single partition on each of the 3 disks__
+> Attach 3 volumes to the newly provisions NFS server, log into the server and make sure the volumes are attached properly
+ 
 
-    sudo fdisk /dev/xvdf
-    sudo fdisk /dev/xvfg
-    sudo fdisk /dev/xvfh
+    lsblk
+
+![attached_volumes](./images/lsblk.png)
+
+__Use gdisk utility to create a single partition on each of the 3 disks__
+
+    sudo gdisk /dev/xvdf
+    sudo gdisk /dev/xvdg
+    sudo gdisk /dev/xvdh
 
 __Verify the attached disks were formated properly__
 
@@ -140,7 +147,7 @@ __Use vgcreate utility to add all 3 PVs to a volume group (VG). Name the VG webd
 
 ![volume_group](./images/vol_group.jpg)
 
-__Verify logical group
+__Verify logical group__
 
     sudo vgs
 
@@ -173,7 +180,6 @@ __Verify logical group__
     sudo mkfs -t xfs /dev/nasdata-vg/lv-logs
 
 ![formatting with the xfs file system](./images/xfs.jpg)
-
 
 > Create mount points on /mnt directory for the logical volumes as follows:
 
@@ -222,18 +228,18 @@ __Verify logical group__
 
 > Export the mounts for webservers 'subnet cidr' to connect as clients.
 
-__Note:__ To check your 'subnet cidr' - open your EC2 details in AWS web console and locate 'Networking' tab and open a Subnet link
+__Note:__ To check your 'subnet cidr' - open your EC2 details in AWS web console and locate 'Networking' tab and open a Subnet lD
 
 > Make sure we set up permission that will allow our Web servers to read, write and execute files on NFS.
 
     sudo chown -R nobody: /mnt/apps
     sudo chown -R nobody: /mnt/logs
     sudo chown -R nobody: /mnt/opt
-
+---
     sudo chmod -R 777 /mnt/apps
     sudo chmod -R 777 /mnt/logs
     sudo chmod -R 777 /mnt/opt
-
+---
     sudo systemctl restart nfs-server.service
 
 ![chmod_chown](./images/chmod_chown.jpg)
@@ -266,6 +272,7 @@ __Note:__ To check your 'subnet cidr' - open your EC2 details in AWS web console
 Note: Open the following ports to allow the NFS server to be accessible from the clients
 TCP port 111, 
 UDP port 111,
+TCP port 2049,
 UDP port 2049
 
 ![nfs_ports](./images/nfs_ports.jpg)
@@ -277,17 +284,17 @@ UDP port 2049
   
 Update repository
 
-  __update 
-
     sudo yum update
 
   __install MySQL repository by downloading and installing the appropriate RPM package frm MySQL website__
 
-    sudo wget https://dev.mysql.com/get/mysql80-community-release-el8-1.noarch.rpm
+    sudo yum install wget
+---
+    sudo wget  https://dev.mysql.com/get/mysql80-community-release-el9-1.noarch.rpm 
 
 ![downlod_mysql_repo](./images/mysql_repo.jpg)
   
-    sudo rpm -ivh mysql80-community-release-el8-1.noarch.rpm
+    sudo rpm -ivh mysql80-community-release-el9-1.noarch.rpm
 
 ![rpm_mysql80-community](./images/rpm_mysql80-community.jpg)
 
@@ -301,12 +308,18 @@ Update repository
 
     sudo systemctl start mysqld
     sudo systemctl enable mysqld
+    sudo systemctl status mysqld
 
 ![start_and_enable_mysqld](./images/start_and_enable.jpg)
 
   __Secure the MySQL installation by running the mysql_secure_installation script__
 
-    sudo mysql_secure_installation
+```
+    sudo grep 'temporary password' /var/log/mysqld.log | awk '{print $NF}'
+
+    sudo mysql -u root -p
+
+```
 
 > Configuring remote connections
 
@@ -316,12 +329,15 @@ Update repository
 
 ![remote_connnect_to_mysql_server](./images/remote_config.jpg)
 
-
   __Create a database and name it tooling__
+
+    sudo mysql -u root -p
+
+    ALTER USER 'root'@'localhost' IDENTIFIED BY 'your-new-password;
 
 ![tooling_db](./images/tooling_db.jpg)
 
-    sudo mysql -u root -p
+
 
     ```SQL
      CREATE DATABASE tooling;
@@ -330,17 +346,13 @@ Update repository
   __Create a database user and name it webaccess__
 
 ```SQL
-    CREATE USER 'webaccess'@'172.31.51.216' IDENTIFIED BY 'mypass';
-
-    CREATE USER 'webaccess'@'172.31.59.169' IDENTIFIED BY 'mypass';
+    CREATE USER 'webaccess'@'172.31.80.0/20' IDENTIFIED BY 'root!';
 ```
 
 ![db_user](./images/db_user.jpg)
 
 ```SQL
-    GRANT ALL PRIVILEGES ON tooling.* TO 'webaccess'@'172.31.51.216' WITH GRANT OPTION;
-
-     GRANT ALL PRIVILEGES ON tooling.* TO 'webaccess'@'172.31.59.169' WITH GRANT OPTION;
+    GRANT ALL PRIVILEGES ON tooling.* TO 'webaccess'@'172.31.80.0/20' WITH GRANT OPTION;
 ```
 
 ![db_priviledges](./images/db_priviledges.jpg)
@@ -353,15 +365,22 @@ Update repository
 
 __Deploy 3 new redHat Servers and configure NFS client__
 
+    sudo yum update
+---
+__Install mysql client for remote connection to database server server__
+
+    sudo yum install mysql
    
 __Install NFS client__
 
-  sudo yum install nfs-utils nfs4-acl-tools -y
+    sudo yum install nfs-utils nfs4-acl-tools -y
 
 ![nfs_utilities](./images/install_nfs_utilities.jpg)
 
-sudo mkdir /var/www
-sudo mount -t nfs -o rw,nosuid 172.31.80.61:/mnt/apps /var/www
+    sudo mkdir /var/www
+
+    sudo mount -t nfs -o rw,nosuid 
+    <private-ip-address-nfs-server>:/mnt/apps /var/www
 
 __Verify NFS was mounted successfully on the new web server__
 
@@ -375,24 +394,25 @@ __Make sure the changes persist on Web server after reboot__
 
 __add the following lines__
 
-    172.31.48.161:/mnt/apps /var/www nfs defaults 0 0
+    <private-ip-address-nfs-server>:/mnt/apps /var/www nfs defaults 0 0
 
 __Install Remi's repository, Apache and PHP__
-
 
     sudo yum install httpd -y
     
     sudo systemctl start httpd
+
     sudo systemctl status httpd
+    
+    sudo systemctl enable httpd
 
 ![install httpd](./images/install_httpd.jpg)
 
-
-    sudo dnf install https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm
+    sudo dnf install https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm
 
 ![install epl release](./images/install_epl_release.jpg)
 
-    sudo dnf install dnf-utils http://rpms.remirepo.net/enterprise/remi-release-8.rpm
+    sudo dnf install dnf-utils http://rpms.remirepo.net/enterprise/remi-release-9.rpm
 
 ![dnf_utils](./images/dnf_utilities.jpg)
 
@@ -427,11 +447,24 @@ __Verify files sync on servers and NFS servers__
 
 __Locate the log folder for apache web server and mount it to NFS server's export for logs__
 
-    sudo mount -t nfs 172.31.80.61:/mnt/logs /var/log/httpd
+    sudo mount -t nfs <nfs-servers-private-ip>:/mnt/logs /etc/httpd/logs
 
 ![mount_apache_log_folder](./images/mount_apache_log_folder.jpg)
 
+__make sure the mount point will persist after reboot__
+
+    sudo vi /etc/fstab
+
+    <nfs-servers-ip-address>:/mnt/logs /etc/httpd/logs nfs defaults 0 0
+    
+
+__Install GIT__
+
+    sudo yum install git
+
 __Fork the tooling source code from 'Darey.io' Github account to your Github account__
+    
+    git clone https://github.com/darey-io/tooling.git
 
 ![forked_repo](./images/forked_repo.jpg)
 
@@ -439,20 +472,42 @@ __Deploy the tooling website's code to the Webserver__
 
 ![deploy](./images/deploy.jpg)
 
+__Ensure that the html folder from the repository is deployed to /var/www/html__
+
+     cd tooling
+     sudo cp -R . /var/www
 
 __Update the website configuration to connect to the dataase in the "/var/www/html/functions.php" file Apply tooling-db.sql script to your database using the following command__
 
-    mysql -h <databse-private-ip> -u <db-username> -p <db-name> < tooling-db.sql
+    sudo mysql -h <databse-private-ip> -u <db-username> -p <db-name> < tooling-db.sql
+
 
 __Create in mysql a new admin user with username: myuser and password: password:__
 
 ```SQL
-    INSERT INTO `users` (`id`, `username`, `password`, `email`, `user_type`, `status`) VALUES (1, 'myuser', 'mypass', 'user@mail.com', 'admin', '1');
+    use tooling;
+
+    UPDATE `users`
+    SET `username` = 'myuser',
+        `password` = '575b',
+        `email` = 'user@mail.com',
+        `user_type` = 'admin',
+        `status` = '1'
+    WHERE `id` = 1;
 ```
 
 __Open the website in your web browser__
 
+<http:/<Web-Server-Public-IP-Address-or-Public-DNS-Name>/index.php>
+
 ![open website in broswer](./images/login.jpg)
+
+
+    Note 1: Do not forget to open TCP port 80 on the Web Server.
+---
+    Note 2: If you encounter 403 Error – check permissions to your /var/www/html folder and also disable SELinux sudo setenforce 0
+---
+    To make this change permanent – open following config file sudo vi /etc/sysconfig/selinux and set SELINUX=disabled then restrt httpd.
 
 
 
